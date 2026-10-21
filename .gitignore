@@ -1,0 +1,31 @@
+# Environment variables & secrets (CRITICAL: Never commit secrets)
+.env
+.env.*
+!.env.example
+
+# Binaries & build artifacts
+bin/
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+/main
+/server
+
+# IDE & Editor folders
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+.agents/
+
+# OS specific files
+.DS_Store
+Thumbs.db
+
+# Temporary test files & logs
+*.log
+test.json
+coverage.out

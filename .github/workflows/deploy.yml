@@ -1,0 +1,87 @@
+﻿name: Deploy BlindTag API to GCP Cloud Run
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+env:
+  GCP_REGION: asia-northeast3 # ?쒖슱 由ъ쟾
+  GAR_REPO: blindtag-repo     # Artifact Registry ??μ냼 ?대쫫
+  SERVICE_NAME: blindtag-api  # Cloud Run ?쒕퉬???대쫫
+
+jobs:
+  test-and-deploy:
+    name: Test, Build & Deploy
+    runs-on: ubuntu-latest
+
+    steps:
+      # 1. ?뚯뒪 肄붾뱶 泥댄겕?꾩썐
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      # 2. Go ?섍꼍 ?ㅼ젙 諛??⑥쐞 ?뚯뒪???ㅽ뻾
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: 'stable'
+
+      - name: Run Go Unit Tests
+        run: |
+          go test -v ./...
+
+      # 3. Google Cloud ?몄쬆 (?쒕퉬??怨꾩젙 JSON ???ъ슜)
+      - name: Authenticate to Google Cloud
+        id: auth
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+
+      # 4. gcloud CLI ?ㅼ젙 諛?Docker ?몄쬆
+      - name: Set up Cloud SDK
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: Configure Docker for Artifact Registry
+        run: |
+          gcloud auth configure-docker ${{ env.GCP_REGION }}-docker.pkg.dev --quiet
+
+      # 5. Docker ?대?吏 鍮뚮뱶 諛?Artifact Registry ?몄떆
+      - name: Build and Push Docker Image
+        env:
+          PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
+          IMAGE_TAG: ${{ env.GCP_REGION }}-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/${{ env.GAR_REPO }}/${{ env.SERVICE_NAME }}:${{ github.sha }}
+          LATEST_TAG: ${{ env.GCP_REGION }}-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/${{ env.GAR_REPO }}/${{ env.SERVICE_NAME }}:latest
+        run: |
+          docker build -t $IMAGE_TAG -t $LATEST_TAG .
+          docker push $IMAGE_TAG
+          docker push $LATEST_TAG
+
+      # 6. GCP Cloud Run ?쒕쾭由ъ뒪 而⑦뀒?대꼫 諛고룷
+      - name: Deploy to Cloud Run
+        id: deploy
+        uses: google-github-actions/deploy-cloudrun@v2
+        with:
+          service: ${{ env.SERVICE_NAME }}
+          region: ${{ env.GCP_REGION }}
+          image: ${{ env.GCP_REGION }}-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/${{ env.GAR_REPO }}/${{ env.SERVICE_NAME }}:${{ github.sha }}
+          flags: |
+            --allow-unauthenticated
+            --min-instances=0
+            --max-instances=5
+            --memory=256Mi
+            --cpu=1
+            --port=8080
+          env_vars: |
+            APP_ENV=production
+            PORT=8080
+            CORS_ALLOWED_ORIGINS=*
+            DATABASE_URL=${{ secrets.DATABASE_URL }}
+            JWT_SECRET=${{ secrets.JWT_SECRET }}
+
+      # 7. 諛고룷 ?꾨즺??怨듦컻 Cloud Run HTTPS URL 異쒕젰
+      - name: Output Service URL
+        run: |
+          echo "=========================================================="
+          echo "?? BlindTag API successfully deployed to GCP Cloud Run!"
+          echo "?뙋 Service URL: ${{ steps.deploy.outputs.url }}"
+          echo "=========================================================="

@@ -1,0 +1,55 @@
+# =========================================================================
+# GCP Cloud Build Pipeline for BlindTag API -> Cloud Run Auto Deployment
+# 실행 방법: gcloud builds submit --config=cloudbuild.yaml
+# =========================================================================
+
+steps:
+  # 1. Docker 이미지 빌드
+  - name: 'gcr.io/cloud-builders/docker'
+    args:
+      - 'build'
+      - '-t'
+      - 'asia-northeast3-docker.pkg.dev/$PROJECT_ID/blindtag-repo/blindtag-api:$COMMIT_SHA'
+      - '-t'
+      - 'asia-northeast3-docker.pkg.dev/$PROJECT_ID/blindtag-repo/blindtag-api:latest'
+      - '.'
+
+  # 2. Artifact Registry로 푸시
+  - name: 'gcr.io/cloud-builders/docker'
+    args:
+      - 'push'
+      - 'asia-northeast3-docker.pkg.dev/$PROJECT_ID/blindtag-repo/blindtag-api:$COMMIT_SHA'
+  - name: 'gcr.io/cloud-builders/docker'
+    args:
+      - 'push'
+      - 'asia-northeast3-docker.pkg.dev/$PROJECT_ID/blindtag-repo/blindtag-api:latest'
+
+  # 3. Cloud Run에 새 리비전 배포 (서울 리전: asia-northeast3)
+  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+    entrypoint: gcloud
+    args:
+      - 'run'
+      - 'deploy'
+      - 'blindtag-api'
+      - '--image'
+      - 'asia-northeast3-docker.pkg.dev/$PROJECT_ID/blindtag-repo/blindtag-api:$COMMIT_SHA'
+      - '--region'
+      - 'asia-northeast3'
+      - '--platform'
+      - 'managed'
+      - '--allow-unauthenticated'
+      - '--min-instances'
+      - '0'
+      - '--max-instances'
+      - '5'
+      - '--memory'
+      - '256Mi'
+      - '--cpu'
+      - '1'
+
+images:
+  - 'asia-northeast3-docker.pkg.dev/$PROJECT_ID/blindtag-repo/blindtag-api:$COMMIT_SHA'
+  - 'asia-northeast3-docker.pkg.dev/$PROJECT_ID/blindtag-repo/blindtag-api:latest'
+
+options:
+  logging: CLOUD_LOGGING_ONLY
